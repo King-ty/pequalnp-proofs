@@ -3899,6 +3899,7 @@ private lemma c2509_live (C2 C3 : Circuit) (a : Nat)
   have ctrl : represented (extra2509 ++ w) (ctrl2509 true v) ∨ witness (extra2509 ++ w) (ctrl2509 true v) := by
     have hx : represented (extra2509 ++ w) (inputs.getD 4 zero) :=
       Or.inl (List.mem_cons_self ..)
+    simp only [ctrl2509, ite_true]
     exact bin_rep (w := extra2509 ++ w) (a := v) (b := inputs.getD 4 zero) true hv hx
   obtain ⟨k₁, t₁, S₁, hk₁, run₁, sub₁⟩ := pull_gate run ctrl (by
     intro b hb
