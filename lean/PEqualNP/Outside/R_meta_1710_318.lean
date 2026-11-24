@@ -31,9 +31,12 @@ theorem PEqualNP.Outside.R_meta_1710_318
       let x : Fin n → Bool := fun i => decide (i = p.val ∨ i = v)
       let y : Fin n → Bool := fun i => decide (i = v)
       have one : NestedCover.graphFun G ∅ x = true := by
-        simpa [NestedCover.graphFun] using
+        delta NestedCover.graphFun
+        simpa using
           (show ∃ a b, G.Adj a b ∧ x a = true ∧ x b = true from ⟨p, v, hv, by simp [x], by simp [x]⟩)
-      have zero : NestedCover.graphFun G ∅ y = false := by simp [NestedCover.graphFun,y]
+      have zero : NestedCover.graphFun G ∅ y = false := by
+        delta NestedCover.graphFun
+        simp [y]
       let step := fun (w : List Bool) (g : Gate) => w ++ [g.op.eval (g.inputs.map fun i => w.getD i false)]
       have propagate (gs : List Gate) (unused : p.val.val ∉ gs.flatMap Gate.inputs)
           (a b : List Bool) (len : a.length = b.length)
@@ -94,7 +97,8 @@ theorem PEqualNP.Outside.R_meta_1710_318
   have cg : circuitFun n C = NestedCover.graphFun G ∅ := by
     funext x
     rw [computes]
-    simp [NestedCover.graphFun]
+    delta NestedCover.graphFun
+    simp
   have peel : ∀ m (K : SimpleGraph (Fin n)) [DecidableRel K.Adj],
       Fintype.card K.support = m →
       ∃ (S : Set (Fin n)) (H : SimpleGraph (Fin n)) (_ : DecidableRel H.Adj),
