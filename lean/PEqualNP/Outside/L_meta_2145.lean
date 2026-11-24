@@ -1,4 +1,3 @@
-import Mathlib
 import PEqualNP.Defs
 
 -- The degree-one lower bound machinery is adapted from the checked proof
