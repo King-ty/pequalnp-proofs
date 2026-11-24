@@ -4565,13 +4565,89 @@ private def certs : List (BitVec 13 × BitVec 13) :=
 private def rows : List (Fin 13 × BitVec 13) :=
 [⟨0, 523⟩, ⟨1, 1046⟩, ⟨2, 2092⟩, ⟨3, 4184⟩, ⟨4, 177⟩, ⟨5, 354⟩, ⟨6, 708⟩, ⟨7, 1416⟩, ⟨8, 2832⟩, ⟨9, 5664⟩, ⟨10, 3137⟩, ⟨11, 6274⟩, ⟨12, 4357⟩]
 private def capOK (m : BitVec 13) := trips.all (fun t => (t.2 &&& m) != t.2)
+
 set_option maxRecDepth 200000 in
-private theorem tripData : ∀ t ∈ trips, (decode t.2).card = 3 ∧ decode t.2 ⊆ delta.image (fun d => d+t.1) := by decide
+set_option maxHeartbeats 12000000 in
+private theorem tripData : ∀ t ∈ trips, (decode t.2).card = 3 ∧ decode t.2 ⊆ delta.image (fun d => d+t.1) := by
+  let pred := fun (t : Fin 13 × BitVec 13) => (decode t.2).card = 3 ∧ decode t.2 ⊆ delta.image (fun d => d+t.1)
+  have hx : trips.all (fun i => decide (pred i)) = true := by decide
+  intro element member
+  exact of_decide_eq_true (List.all_eq_true.mp hx element member)
 set_option maxRecDepth 200000 in
-private theorem rowData : ∀ t ∈ rows, delta.image (fun d => d+t.1) ⊆ decode t.2 := by decide
+set_option maxHeartbeats 12000000 in
+private theorem rowData : ∀ t ∈ rows, delta.image (fun d => d+t.1) ⊆ decode t.2 := by
+  let pred := fun (t : Fin 13 × BitVec 13) => delta.image (fun d => d+t.1) ⊆ decode t.2
+  have hx : rows.all (fun i => decide (pred i)) = true := by decide
+  intro element member
+  exact of_decide_eq_true (List.all_eq_true.mp hx element member)
+
+private def lineBits (w : Fin 13) : BitVec 13 :=
+  ([523,1046,2092,4184,177,354,708,1416,2832,5664,3137,6274,4357] : List (BitVec 13)).getD w 0
 set_option maxRecDepth 200000 in
+set_option maxHeartbeats 12000000 in
+private theorem lineBits_iff : ∀ p w : Fin 13, (lineBits w).getLsbD p = true ↔ inc p w := by decide
+private def awayBits (m : BitVec 13) (w : Fin 13) : Prop := m &&& lineBits w = 0
+private instance (m : BitVec 13) (w : Fin 13) : Decidable (awayBits m w) := by unfold awayBits; infer_instance
+private theorem awayBits_iff (m : BitVec 13) (w : Fin 13) : awayBits m w ↔ outside (decode m) w := by
+  constructor
+  · intro h p hp hi
+    have e := congrArg (fun b : BitVec 13 => b.getLsbD p) h
+    have h1 : m.getLsbD p = true := by simpa [decode] using hp
+    have h2 := (lineBits_iff p w).mpr hi
+    simp [h1] at e
+    change (lineBits w)[p.val] = true at h2
+    rw [h2] at e
+    contradiction
+  · intro h
+    apply BitVec.eq_of_getElem_eq
+    intro i hi
+    let p : Fin 13 := ⟨i,hi⟩
+    have hh : m[i] = true → (lineBits w)[i] ≠ true := by
+      intro h1 h2
+      apply h p _ ((lineBits_iff p w).mp h2)
+      simpa [decode,p] using h1
+    cases hx : m[i] <;> cases hy : (lineBits w)[i] <;> simp_all
+private def fastCert (c : BitVec 13 × BitVec 13) : Prop :=
+  let m := c.1
+  (∀ p : Fin 13, m.getLsbD p = false →
+    ∃ w : Fin 13, awayBits m w ∧ (lineBits w).getLsbD p = true) ∧
+  (∀ w : Fin 13, (m &&& lineBits w) ≠ m) ∧
+  (∀ p : Fin 13, ∃ w : Fin 13, awayBits m w ∧ (lineBits w).getLsbD p = false) ∧
+  m.getLsbD 0 = true ∧
+  ∀ p : Fin 13, c.2.getLsbD p = true → awayBits m (-p)
+private instance (c : BitVec 13 × BitVec 13) : Decidable (fastCert c) := by unfold fastCert; infer_instance
+private theorem fastCert_elim (c : BitVec 13 × BitVec 13) (hc : fastCert c) :
+    generic (decode c.1) ∧ (0 : Fin 13) ∈ decode c.1 ∧
+    ∀ p ∈ decode c.2, outside (decode c.1) (-p) := by
+  obtain ⟨a,b,d,z,f⟩ := hc
+  refine ⟨⟨?_,?_,?_⟩,by simpa [decode] using z,?_⟩
+  · intro p hp
+    obtain ⟨w,hw,hp⟩ := a p (by simpa [decode] using hp)
+    exact ⟨w,(awayBits_iff ..).mp hw,(lineBits_iff ..).mp hp⟩
+  · rintro ⟨w,hw⟩
+    apply b w
+    apply BitVec.eq_of_getElem_eq
+    intro i hi
+    let p : Fin 13 := ⟨i,hi⟩
+    have hh : c.1[i] = true → (lineBits w)[i] = true := by
+      intro h1
+      exact (lineBits_iff p w).mpr (hw p (by simpa [decode,p] using h1))
+    cases hx : c.1[i] <;> cases hy : (lineBits w)[i] <;> simp_all
+  · rintro ⟨p,hp⟩
+    obtain ⟨w,hw,hn⟩ := d p
+    have hh := (lineBits_iff p w).mpr (hp w ((awayBits_iff ..).mp hw))
+    rw [hh] at hn
+    contradiction
+  · intro p hp
+    exact (awayBits_iff ..).mp (f p (by simpa [decode] using hp))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 12000000 in
 private theorem certData : ∀ c ∈ certs, generic (decode c.1) ∧ (0 : Fin 13) ∈ decode c.1 ∧
-    ∀ p ∈ decode c.2, outside (decode c.1) (-p) := by decide
+    ∀ p ∈ decode c.2, outside (decode c.1) (-p) := by
+  have h : certs.all (fun c => decide (fastCert c)) = true := by decide
+  intro c hc
+  exact fastCert_elim c (of_decide_eq_true (List.all_eq_true.mp h c hc))
+
 private theorem capOK_of {X : Finset (Fin 13)}
     (h : ∀ w : Fin 13, ((delta.image (fun d => d+w)) ∩ X).card ≤ 2) : capOK (code X) = true := by
   apply List.all_eq_true.mpr
